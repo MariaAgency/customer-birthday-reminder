@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="robots" content="noindex">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#A23E6A">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Birthdays">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 </head>
 <body>
 <title>Customer Birthday Reminder</title>
@@ -107,7 +115,9 @@ table.fix td:first-child{font-variant-numeric:tabular-nums;white-space:nowrap}
 details.guide summary{cursor:pointer;font-family:var(--display);font-weight:600;font-size:17px}
 details.guide ol{margin:10px 0 0;padding-left:20px;display:grid;gap:6px;max-width:70ch}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;max-width:min(92vw,480px);z-index:20;box-shadow:0 6px 20px rgba(0,0,0,.25)}
-@media (prefers-reduced-motion:no-preference){.card{transition:opacity .2s}}
+@media (prefers-reduced-motion:no-preference){.card{transition:opacity .2s}
+  .flash{animation:flash .7s ease-out}
+  @keyframes flash{0%{box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 55%,transparent)}100%{box-shadow:0 0 0 0 transparent}}}
 </style>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -395,19 +405,21 @@ const T={
   en:[
     (n,co)=>[`Dear ${n},\n\nWishing you a very happy birthday! Thank you for your continued trust and support. May the year ahead bring you good health, happiness and success${co?`, for you and everyone at ${co}`:""}.`,"Warm regards"],
     (n,co)=>[`Happy Birthday, ${n}!\n\nOn your special day, I would like to thank you for the good working relationship we share. Wishing you joy, good health and a wonderful year ahead.`,"Best wishes"],
-    (n,co)=>[`Dear ${n},\n\nMany happy returns of the day! It has been a pleasure working with you${co?` and the team at ${co}`:""}. I hope you have a lovely celebration and a great year ahead.`,"Kind regards"]
+    (n,co)=>[`Hello ${n},\n\nMany happy returns of the day! It has been a pleasure working with you${co?` and the team at ${co}`:""}. I hope you have a lovely celebration and a great year ahead.`,"Kind regards"],
+    (n,co)=>[`Warmest birthday wishes, ${n}!\n\nThank you for being such a valued client. I wish you a year filled with good health, happiness and many good moments with your loved ones.`,"Warm wishes"]
   ],
   bm:[
     (n,co)=>[`Salam sejahtera ${n},\n\nSelamat Hari Jadi! Terima kasih atas kepercayaan dan sokongan anda selama ini. Semoga anda sentiasa sihat, bahagia dan terus maju jaya${co?` bersama ${co}`:""}.`,"Salam mesra"],
     (n,co)=>[`Selamat Hari Jadi, ${n}!\n\nSempena hari istimewa ini, saya ingin mengucapkan terima kasih atas hubungan kerja yang baik antara kita. Semoga hari anda dipenuhi kegembiraan dan tahun yang mendatang membawa kesihatan serta kejayaan.`,"Yang ikhlas"],
-    (n,co)=>[`Salam sejahtera ${n},\n\nSelamat Hari Lahir! Semoga anda dikurniakan kesihatan yang baik, kebahagiaan dan kejayaan sepanjang tahun ini. Terima kasih kerana terus memberi kepercayaan kepada kami.`,"Salam hormat"]
+    (n,co)=>[`Kepada ${n} yang dihormati,\n\nSelamat Hari Lahir! Semoga anda dikurniakan kesihatan yang baik, kebahagiaan dan kejayaan sepanjang tahun ini. Terima kasih kerana terus memberi kepercayaan kepada kami.`,"Salam hormat"],
+    (n,co)=>[`Ucapan Selamat Hari Jadi buat ${n}!\n\nTerima kasih kerana menjadi pelanggan yang amat kami hargai. Semoga anda sentiasa dikurniakan kesihatan yang baik, kebahagiaan dan saat-saat indah bersama keluarga tersayang.`,"Salam mesra"]
   ],
   enLate:[(n)=>[`Dear ${n},\n\nA belated happy birthday! I hope you had a wonderful day. Thank you for your continued trust, and best wishes for a healthy and successful year ahead.`,"Warm regards"]],
   bmLate:[(n)=>[`Salam sejahtera ${n},\n\nSelamat Hari Jadi, walaupun agak terlewat! Semoga anda telah meraikan hari istimewa itu dengan gembira. Terima kasih atas kepercayaan anda, dan semoga tahun ini membawa kesihatan serta kejayaan.`,"Salam mesra"]]
 };
 function hash(s){let h=2166136261;for(const ch of s){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0}
 const signer=c=>c.am||S.settings.sender||"[Your name]";
-function prefs(c){const p=S.prefs[c.key]||{};return{lang:p.lang||S.settings.lang,variant:p.variant??hash(c.key)%3,design:p.design??hash(c.key+"d")%3}}
+function prefs(c){const p=S.prefs[c.key]||{};return{lang:p.lang||S.settings.lang,variant:p.variant??hash(c.key)%T.en.length,design:p.design??hash(c.key+"d")%3}}
 function setPref(c,patch){S.prefs[c.key]=Object.assign({},S.prefs[c.key],patch);store.set("cbr.prefs",S.prefs)}
 function message(c,o,lang,variant){
   const late=o.days<0,n=c.greet,co=c.company;const pick=k=>{const a=T[late?k+"Late":k];return a[variant%a.length](n,co)};
@@ -476,9 +488,10 @@ function cardOpts(item){
     title:L==="bm"?"Selamat Hari Jadi":L==="both"?"Selamat Hari Jadi":"Happy Birthday",
     sub:L==="both"?"Happy Birthday":"",from:L==="bm"?"Ikhlas daripada":"With warm wishes from"};
 }
-function paintCard(i){
+function paintCard(i,now){
   const item=S.view[i];if(!item)return;const cv=document.createElement("canvas");drawCard(cv,cardOpts(item));S.canvases[i]=cv;
   const img=document.getElementById("img-"+i);if(!img)return;
+  if(now){if(img.dataset.url){URL.revokeObjectURL(img.dataset.url);delete img.dataset.url}img.src=cv.toDataURL("image/jpeg",.92);return}
   cv.toBlob(b=>{if(!b)return;if(img.dataset.url)URL.revokeObjectURL(img.dataset.url);const u=URL.createObjectURL(b);img.dataset.url=u;img.src=u},"image/png");
 }
 
@@ -566,12 +579,17 @@ function cardHTML(it,i){
 }
 
 /* ---------- card actions ---------- */
+function flash(el){if(!el)return;el.classList.remove("flash");void el.offsetWidth;el.classList.add("flash")}
 document.addEventListener("click",e=>{
   const b=e.target.closest("[data-act]");if(!b)return;const i=+b.dataset.i,it=S.view[i];if(!it)return;const c=it.c,act=b.dataset.act;
   const text=()=>$("#msg-"+i).value;
   if(act==="lang"){setPref(c,{lang:b.dataset.v});render();document.getElementById("card-"+i)?.scrollIntoView({block:"nearest"})}
-  else if(act==="variant"){const p=prefs(c);delete S.edits[editKey(c,it.o,p.lang)];setPref(c,{variant:p.variant+1});$("#msg-"+i).value=currentText(it)}
-  else if(act==="design"){setPref(c,{design:prefs(c).design+1});paintCard(i)}
+  else if(act==="variant"){
+    const p=prefs(c);delete S.edits[editKey(c,it.o,p.lang)];setPref(c,{variant:p.variant+1});
+    const ta=$("#msg-"+i);ta.value=currentText(it);flash(ta);
+    toast(it.o.days<0?"Belated wishes have one wording. Edit the text if you like.":`Wording ${(p.variant+1)%T.en.length+1} of ${T.en.length}`);
+  }
+  else if(act==="design"){const d=prefs(c).design+1;setPref(c,{design:d});paintCard(i,true);flash(document.getElementById("img-"+i));toast(`Picture style ${d%DESIGNS.length+1} of ${DESIGNS.length}`)}
   else if(act==="copymsg"){copyText(text())}
   else if(act==="wa"){b.href=`https://wa.me/${c.wa}?text=${encodeURIComponent(text())}`;toast("WhatsApp opens with the message typed. Paste or attach the picture, then press send.")}
   else if(act==="mail"){b.href=`mailto:${c.email}?subject=${encodeURIComponent(subject(c,it.o,prefs(c).lang))}&body=${encodeURIComponent(text())}`}
