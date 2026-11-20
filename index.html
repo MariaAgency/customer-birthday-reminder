@@ -102,6 +102,7 @@ table.fix th,table.fix td{text-align:left;padding:8px 10px;border-bottom:1px sol
 table.fix th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
 table.fix td:first-child{font-variant-numeric:tabular-nums;white-space:nowrap}
 .scroll{overflow-x:auto}
+#reviewPreview td,#reviewPreview th{white-space:nowrap}
 .map{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
 details.guide summary{cursor:pointer;font-family:var(--display);font-weight:600;font-size:17px}
 details.guide ol{margin:10px 0 0;padding-left:20px;display:grid;gap:6px;max-width:70ch}
@@ -128,7 +129,7 @@ details.guide ol{margin:10px 0 0;padding-left:20px;display:grid;gap:6px;max-widt
     </div>
     <p id="listStatus" class="small"></p>
     <div class="row">
-      <label class="btn primary" for="fileIn">Load Excel / CSV</label>
+      <label class="btn primary" for="fileIn">Load Excel / CSV / PDF</label>
       <input id="fileIn" type="file" accept=".xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg" hidden>
       <button id="sampleBtn" type="button">Try with sample customers</button>
       <button id="templateBtn" type="button">Get Excel template</button>
@@ -147,6 +148,7 @@ details.guide ol{margin:10px 0 0;padding-left:20px;display:grid;gap:6px;max-widt
     <p class="small muted" id="reviewInfo"></p>
     <div class="map" id="mapFields"></div>
     <p id="reviewCounts" class="small"></p>
+    <div class="scroll" id="reviewPreview"></div>
     <div class="row">
       <button id="useBtn" type="button" class="primary">Use this list</button>
       <button id="cancelImport" type="button">Cancel</button>
@@ -213,7 +215,7 @@ details.guide ol{margin:10px 0 0;padding-left:20px;display:grid;gap:6px;max-widt
       <summary>How to use (every Monday, about 5 minutes)</summary>
       <ol>
         <li>Keep one Excel file with these columns: <b>Customer Name, Company, Birthday, Phone, Email, Account Manager</b>. Tap <b>Get Excel template</b> for a blank one. An optional <b>Greeting Name</b> column (for example "Dato' Lim") is used in the message instead of the full name.</li>
-        <li>Tap <b>Load Excel / CSV</b>, check the columns, then tap <b>Use this list</b>. The list stays on this device, so next week you only reload it if the file changed.</li>
+        <li>Tap <b>Load Excel / CSV / PDF</b>, check the columns and the preview, then tap <b>Use this list</b>. A PDF must be a real PDF export with column headings, not a scanned picture. Always compare the preview with the PDF. The list stays on this device, so next week you only reload it if the file changed.</li>
         <li>Orange cards are birthdays within <b>3 days</b>: send these now. Pick a language, edit the message if you like.</li>
         <li><b>WhatsApp:</b> tap <b>Copy picture</b> (or <b>Save picture</b>), then <b>Open WhatsApp</b>. The message is already typed; paste or attach the picture and press send. <b>Email:</b> tap <b>Copy message</b> and paste it, with the picture, into your email.</li>
         <li>After you send, tap <b>Mark as sent</b>. The card turns green so nobody in the team sends twice on this device.</li>
@@ -594,12 +596,82 @@ document.addEventListener("input",e=>{
   if(e.target.matches("textarea[data-i]")){const it=S.view[+e.target.dataset.i];if(it)S.edits[editKey(it.c,it.o,prefs(it.c).lang)]=e.target.value}
 });
 
+/* ---------- PDF reading (text PDFs only; loaded on first use) ---------- */
+let pdfReady=null;
+function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement("script");s.src=src;s.onload=res;s.onerror=()=>rej(new Error("Could not load "+src));document.head.appendChild(s)})}
+function loadPdfJs(){
+  if(!pdfReady){const B="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/";
+    /* the worker script runs on the page itself, so no separate worker is needed */
+    pdfReady=loadScript(B+"pdf.min.js").then(()=>loadScript(B+"pdf.worker.min.js")).then(()=>{pdfjsLib.GlobalWorkerOptions.workerSrc=B+"pdf.worker.min.js"});
+    pdfReady.catch(()=>{pdfReady=null});}
+  return pdfReady;
+}
+async function pdfToRows(buf){
+  await loadPdfJs();
+  const pdf=await pdfjsLib.getDocument({data:new Uint8Array(buf),isEvalSupported:false}).promise;
+  const lines=[];let count=0;
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p);const tc=await page.getTextContent();
+    const its=tc.items.filter(i=>i.str&&i.str.trim()).map(i=>({x:i.transform[4],y:i.transform[5],w:i.width,h:Math.abs(i.transform[3])||i.height||10,s:i.str}));
+    count+=its.length;its.sort((a,b)=>b.y-a.y||a.x-b.x);
+    const pl=[];
+    for(const it of its){const L=pl.find(l=>Math.abs(l.y-it.y)<=Math.max(2,it.h*.4));if(L)L.items.push(it);else pl.push({y:it.y,h:it.h,items:[it]})}
+    pl.sort((a,b)=>b.y-a.y);
+    for(const l of pl){
+      l.items.sort((a,b)=>a.x-b.x);const cells=[];
+      for(const it of l.items){const c=cells[cells.length-1];const gap=c?it.x-c.x2:1e9;
+        if(c&&gap<it.h*.6){c.s+=(gap>it.h*.12?" ":"")+it.s;c.x2=it.x+it.w}else cells.push({x:it.x,x2:it.x+it.w,s:it.s})}
+      cells.forEach(c=>c.s=c.s.replace(/\s+/g," ").trim());
+      lines.push({page:p,y:l.y,h:l.h,items:l.items,cells});
+    }
+  }
+  if(!count)return{scanned:true};
+  let hi=-1;
+  for(let i=0;i<lines.length&&i<80;i++){const m=guessMap(lines[i].cells.map(c=>c.s));if(m.name>=0&&m.birthday>=0){hi=i;break}}
+  let starts,header;
+  if(hi>=0){starts=lines[hi].cells.map(c=>c.x);header=lines[hi].cells.map(c=>c.s)}
+  else{
+    const xs=[];lines.forEach(l=>l.cells.forEach(c=>xs.push(c.x)));xs.sort((a,b)=>a-b);
+    const cl=[];for(const x of xs){const c=cl[cl.length-1];if(c&&x-c.last<=8){c.n++;c.last=x}else cl.push({n:1,last:x,first:x})}
+    const minN=Math.max(2,lines.length*.3);starts=cl.filter(c=>c.n>=minN).map(c=>c.first);
+    if(starts.length<2)return{error:"layout"};
+    header=starts.map((_,i)=>"Column "+(i+1));
+  }
+  const colOf=x=>{let k=0;for(let i=0;i<starts.length;i++)if(x>=starts[i]-6)k=i;return k};
+  const hdrKey=header.map(norm).join("|");const nameCol=guessMap(header).name;
+  const rows=[header];let last=null;
+  for(let i=hi>=0?hi+1:0;i<lines.length;i++){
+    const l=lines[i];const row=new Array(starts.length).fill("");
+    for(const it of l.items){const k=colOf(it.x);row[k]=row[k]?row[k]+" "+it.s.trim():it.s.trim()}
+    for(let k=0;k<row.length;k++)row[k]=row[k].replace(/\s+/g," ").trim();
+    if(row.map(norm).join("|")===hdrKey)continue;
+    const filled=row.filter(Boolean);
+    if(filled.length===1&&/^(page\s*\d+|\d+\s*(of|\/)\s*\d+|printed|generated)/i.test(filled[0]))continue;
+    /* a wrapped line (no name, sits just under the previous row) belongs to that row */
+    if(last&&nameCol>=0&&!row[nameCol]&&last.page===l.page&&last.y-l.y<=l.h*1.8&&filled.length){
+      const prev=rows[rows.length-1];row.forEach((v,k)=>{if(v)prev[k]=prev[k]?prev[k]+" "+v:v});last={page:l.page,y:l.y};continue;
+    }
+    rows.push(row);last={page:l.page,y:l.y};
+  }
+  return{rows,fromHeader:hi>=0,pages:pdf.numPages};
+}
+
 /* ---------- import ---------- */
 $("#fileIn").addEventListener("change",async e=>{
   const f=e.target.files[0];e.target.value="";if(!f)return;const ext=(f.name.split(".").pop()||"").toLowerCase();const msg=$("#importMsg");msg.hidden=true;
-  if(["pdf","png","jpg","jpeg"].includes(ext)){
-    msg.innerHTML=`<b>${esc(f.name)}</b> is a ${ext.toUpperCase()} file. To keep birthdays accurate, this app only reads Excel or CSV. Send the ${ext.toUpperCase()} to Claude and ask: "Convert this customer list into the Birthday Reminder Excel template." Then load that Excel here.`;
+  if(["png","jpg","jpeg"].includes(ext)){
+    msg.innerHTML=`<b>${esc(f.name)}</b> is a picture. The app can't read pictures accurately. Load the list as Excel, CSV or PDF, or send the picture to Claude and ask: "Convert this customer list into the Birthday Reminder Excel template."`;
     msg.hidden=false;return;
+  }
+  if(ext==="pdf"){
+    toast("Reading PDF…");
+    try{
+      const r=await pdfToRows(await f.arrayBuffer());
+      if(r.scanned){msg.innerHTML=`<b>${esc(f.name)}</b> looks like a scanned picture, so it has no text to read. Export the list from your system as Excel or PDF (not a scan), or send it to Claude to convert.`;msg.hidden=false;return}
+      if(r.error){msg.innerHTML=`Could not find a table in <b>${esc(f.name)}</b>. Make sure the PDF has column headings such as Customer Name and Birthday, or save the list as Excel.`;msg.hidden=false;return}
+      startReview({fileName:f.name,rows:r.rows,source:"pdf",pages:r.pages,found:r.fromHeader});
+    }catch(err){console.error(err);msg.textContent=`Could not read ${f.name}. If it is password-protected, remove the password first, or save the list as Excel.`;msg.hidden=false}
+    return;
   }
   if(typeof XLSX==="undefined"){msg.textContent="The Excel reader did not load. Check your internet connection and reload the page.";msg.hidden=false;return}
   try{
@@ -609,19 +681,23 @@ $("#fileIn").addEventListener("change",async e=>{
     startReview({fileName:f.name,rows});
   }catch(err){msg.textContent=`Could not read ${f.name}. Save it as .xlsx or .csv and try again.`;msg.hidden=false}
 });
-function startReview({fileName,rows,sample}){
+function startReview({fileName,rows,sample,source,pages,found}){
   const headerRow=findHeader(rows);const map=guessMap(rows[headerRow]||[]);
-  S.pending={fileName,rows,headerRow,map,sample:!!sample,loadedAt:new Date().toISOString()};
+  S.pending={fileName,rows,headerRow,map,sample:!!sample,source:source||"sheet",loadedAt:new Date().toISOString()};
   const hdr=rows[headerRow]||[];
-  $("#reviewInfo").textContent=`${fileName}: headings found on row ${headerRow+1}. Check each field points to the right column.`;
+  $("#reviewInfo").innerHTML=source==="pdf"
+    ?`<b>Read from PDF</b> (${pages} page${pages>1?"s":""}, ${rows.length-1} lines). ${found?"Column headings found.":"No headings found, so columns are numbered. Choose them below."} <b>Compare the preview below with your PDF</b>, especially names and birthdays, before you tap Use this list.`
+    :`${esc(fileName)}: headings found on row ${headerRow+1}. Check each field points to the right column.`;
   $("#mapFields").innerHTML=FIELDS.map(f=>`<label class="fld" for="map-${f.k}">${f.label}${f.req?" *":""}<select id="map-${f.k}" data-k="${f.k}"><option value="-1">(not in my file)</option>${hdr.map((h,ix)=>`<option value="${ix}" ${map[f.k]===ix?"selected":""}>${esc(String(h||"Column "+(ix+1)))}</option>`).join("")}</select></label>`).join("");
   $("#review").hidden=false;reviewCounts();$("#review").scrollIntoView({behavior:"smooth",block:"start"});
 }
 $("#mapFields").addEventListener("change",e=>{if(e.target.dataset.k){S.pending.map[e.target.dataset.k]=+e.target.value;reviewCounts()}});
 function reviewCounts(){
   const P=S.pending,ok=P.map.name>=0&&P.map.birthday>=0;$("#useBtn").disabled=!ok;
-  if(!ok){$("#reviewCounts").innerHTML='<span style="color:var(--danger)">Choose the Customer name and Birthday columns to continue.</span>';return}
+  if(!ok){$("#reviewPreview").innerHTML="";$("#reviewCounts").innerHTML='<span style="color:var(--danger)">Choose the Customer name and Birthday columns to continue.</span>';return}
   const r=build(P);const fix=r.problems.filter(p=>p.level==="fix").length,chk=r.problems.filter(p=>p.level==="check").length;
+  const show=r.customers.slice(0,8);
+  $("#reviewPreview").innerHTML=show.length?`<table class="fix"><thead><tr><th>Row</th><th>Customer</th><th>Birthday (as read)</th><th>Company</th><th>Phone</th><th>Email</th><th>Manager</th></tr></thead><tbody>${show.map(c=>`<tr><td>${c.row}</td><td>${esc(c.name)}</td><td><b>${c.d} ${MN[c.m-1]}${c.y?" "+c.y:""}</b></td><td>${esc(c.company)}</td><td>${esc(c.phone)}</td><td>${esc(c.email)}</td><td>${esc(c.am)}</td></tr>`).join("")}</tbody></table>${r.customers.length>8?`<p class="small muted" style="padding:6px 10px">…and ${r.customers.length-8} more.</p>`:""}`:"";
   $("#reviewCounts").innerHTML=`<b>${r.customers.length}</b> customers ready · <b>${fix}</b> rows left out (need fixing) · <b>${chk}</b> to double-check.`+(S.saved?` Using this file <b>replaces</b> the list now on this device (${esc(S.saved.fileName)}).`:"");
 }
 $("#useBtn").addEventListener("click",()=>{
@@ -748,7 +824,7 @@ function buildPdf(){
 /* ---------- start ---------- */
 const go=()=>rebuild();
 if(document.fonts&&document.fonts.load){Promise.all(['700 80px "Dancing Script"','700 60px Outfit','600 40px Outfit','500 30px Inter'].map(f=>document.fonts.load(f).catch(()=>{}))).then(go,go)}else go();
-window.__cbr={S,parseBirthday,parsePhone,buildPdf};
+window.__cbr={S,parseBirthday,parsePhone,buildPdf,pdfToRows,startReview};
 })();
 </script>
 
