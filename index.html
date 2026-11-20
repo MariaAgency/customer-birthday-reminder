@@ -1,0 +1,756 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex">
+</head>
+<body>
+<title>Customer Birthday Reminder</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap">
+<style>
+/* Layout: one calm column; a control strip, then one card per upcoming birthday (picture + message side by side, stacked on phone). */
+:root{
+  --bg:#FBF8F8; --surface:#FFFFFF; --sunk:#F4EEF0; --ink:#2A2226; --muted:#6E6267; --line:#EADDE2;
+  --accent:#A23E6A; --accent-ink:#FFFFFF; --accent-soft:#F7E5EC;
+  --urgent:#A9501A; --urgent-soft:#FCEBDD; --ok:#357257; --ok-soft:#E2F1E8;
+  --warn:#7D600E; --warn-soft:#FBF1D3; --danger:#AE3535; --danger-soft:#FBE3E3;
+  --display:"Outfit", "Segoe UI", system-ui, sans-serif;
+  --body:"Inter", "Segoe UI", system-ui, sans-serif;
+  --r:12px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#191517; --surface:#231E21; --sunk:#2B2529; --ink:#F3ECEF; --muted:#B5A8AE; --line:#3A3236;
+  --accent:#E583AE; --accent-ink:#1B1418; --accent-soft:#3B2531;
+  --urgent:#F2A46E; --urgent-soft:#3A2A1E; --ok:#7FC6A2; --ok-soft:#1E3128;
+  --warn:#E8C664; --warn-soft:#352E17; --danger:#F29090; --danger-soft:#3A2020; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#191517; --surface:#231E21; --sunk:#2B2529; --ink:#F3ECEF; --muted:#B5A8AE; --line:#3A3236;
+  --accent:#E583AE; --accent-ink:#1B1418; --accent-soft:#3B2531;
+  --urgent:#F2A46E; --urgent-soft:#3A2A1E; --ok:#7FC6A2; --ok-soft:#1E3128;
+  --warn:#E8C664; --warn-soft:#352E17; --danger:#F29090; --danger-soft:#3A2020; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5}
+.wrap{max-width:1040px;margin:0 auto;padding-block:20px 60px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:18px}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;letter-spacing:-.01em}
+h1{font-size:clamp(24px,5vw,32px);font-weight:700}
+h2{font-size:19px;font-weight:600}
+h3{font-size:18px;font-weight:600}
+p{margin:0}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+header.top{display:flex;flex-wrap:wrap;gap:10px 20px;align-items:flex-end;justify-content:space-between}
+header.top .lede{max-width:60ch;color:var(--muted);margin-top:4px}
+.today{font-variant-numeric:tabular-nums;font-size:13px;color:var(--muted);text-align:right}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:grid;gap:12px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.between{justify-content:space-between}
+button,.btn{font:600 14px/1.2 var(--body);border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:9px 14px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px;min-height:38px}
+button:hover,.btn:hover{border-color:var(--accent)}
+button:focus-visible,.btn:focus-visible,select:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 45%,transparent);outline-offset:2px}
+.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.primary:hover{filter:brightness(1.06)}
+.ghost{background:transparent}
+.danger{color:var(--danger)}
+.wa{background:#1F8F55;border-color:#1F8F55;color:#fff}
+button[disabled],.btn[aria-disabled="true"]{opacity:.45;cursor:not-allowed;pointer-events:none}
+label.fld{display:grid;gap:4px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+select,input[type=text],input[type=date]{font:500 14px var(--body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-height:38px;max-width:100%}
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.summary{display:flex;flex-wrap:wrap;gap:8px}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:5px 12px;font-size:13px;font-weight:600;background:var(--sunk);color:var(--ink);font-variant-numeric:tabular-nums}
+.pill b{font-family:var(--display);font-size:16px}
+.p-urgent{background:var(--urgent-soft);color:var(--urgent)}
+.p-ok{background:var(--ok-soft);color:var(--ok)}
+.p-warn{background:var(--warn-soft);color:var(--warn)}
+.p-danger{background:var(--danger-soft);color:var(--danger)}
+.p-accent{background:var(--accent-soft);color:var(--accent)}
+.banner{border-radius:var(--r);padding:10px 14px;background:var(--accent-soft);color:var(--ink);font-size:14px}
+.banner.warn{background:var(--warn-soft)}
+.cards{display:grid;gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:grid;gap:12px}
+.card.is-urgent{border-color:color-mix(in srgb,var(--urgent) 55%,var(--line));box-shadow:0 0 0 1px color-mix(in srgb,var(--urgent) 25%,transparent)}
+.card.is-sent{opacity:.78}
+.card-top{display:flex;flex-wrap:wrap;gap:8px 12px;justify-content:space-between;align-items:flex-start}
+.card-top .who{min-width:0}
+.meta{display:flex;flex-wrap:wrap;gap:4px 18px;font-size:13px;color:var(--muted);margin:0}
+.meta div{display:flex;gap:5px;min-width:0;overflow-wrap:anywhere}
+.meta dt{font-weight:600;color:var(--ink)}
+.meta dd{margin:0}
+.notes{display:grid;gap:4px}
+.note{font-size:13px;border-radius:8px;padding:6px 10px;background:var(--warn-soft);color:var(--warn)}
+.compose{display:grid;grid-template-columns:minmax(0,260px) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:680px){.compose{grid-template-columns:minmax(0,1fr)}}
+.pic{display:grid;gap:8px}
+.pic img{width:100%;aspect-ratio:1/1;border-radius:10px;border:1px solid var(--line);background:var(--sunk);display:block;max-width:100%}
+.pic .row button{flex:1 1 auto;justify-content:center}
+.msg{display:grid;gap:8px;min-width:0}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:3px;gap:2px;background:var(--sunk);width:max-content;max-width:100%}
+.seg button{border:0;background:transparent;min-height:30px;padding:5px 12px;font-size:13px}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--accent);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+textarea{width:100%;min-height:190px;resize:vertical;font:400 14px/1.55 var(--body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.subject{font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+.subject b{color:var(--ink)}
+.confirm{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--sunk);border-radius:10px;padding:8px 10px;font-size:14px}
+.empty{text-align:center;padding:28px 16px;color:var(--muted)}
+.empty h3{color:var(--ink);margin-bottom:6px}
+table.fix{width:100%;border-collapse:collapse;font-size:13px}
+table.fix th,table.fix td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+table.fix th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+table.fix td:first-child{font-variant-numeric:tabular-nums;white-space:nowrap}
+.scroll{overflow-x:auto}
+.map{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+details.guide summary{cursor:pointer;font-family:var(--display);font-weight:600;font-size:17px}
+details.guide ol{margin:10px 0 0;padding-left:20px;display:grid;gap:6px;max-width:70ch}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;max-width:min(92vw,480px);z-index:20;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+@media (prefers-reduced-motion:no-preference){.card{transition:opacity .2s}}
+</style>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Customer Birthday Reminder</h1>
+      <p class="lede">See whose birthday is coming up, then send a ready-made wish with a birthday picture by WhatsApp or email.</p>
+    </div>
+    <div class="today" id="todayLbl"></div>
+  </header>
+
+  <section class="panel" aria-labelledby="listH">
+    <div class="row between">
+      <h2 id="listH">Your customer list</h2>
+      <span class="small muted">Your file is read inside this browser and kept on this device only.</span>
+    </div>
+    <p id="listStatus" class="small"></p>
+    <div class="row">
+      <label class="btn primary" for="fileIn">Load Excel / CSV</label>
+      <input id="fileIn" type="file" accept=".xlsx,.xls,.csv,.pdf,.png,.jpg,.jpeg" hidden>
+      <button id="sampleBtn" type="button">Try with sample customers</button>
+      <button id="templateBtn" type="button">Get Excel template</button>
+      <button id="removeBtn" type="button" class="ghost danger">Remove list from this device</button>
+    </div>
+    <div id="removeConfirm" class="confirm" hidden>
+      <span>Remove the customer list and "sent" ticks from this device? Your Excel file is not affected.</span>
+      <button id="removeYes" type="button" class="danger">Yes, remove</button>
+      <button id="removeNo" type="button">Cancel</button>
+    </div>
+    <div id="importMsg" class="banner warn" hidden></div>
+  </section>
+
+  <section class="panel" id="review" hidden aria-labelledby="reviewH">
+    <h2 id="reviewH">Check the columns</h2>
+    <p class="small muted" id="reviewInfo"></p>
+    <div class="map" id="mapFields"></div>
+    <p id="reviewCounts" class="small"></p>
+    <div class="row">
+      <button id="useBtn" type="button" class="primary">Use this list</button>
+      <button id="cancelImport" type="button">Cancel</button>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="What to show">
+    <div class="controls">
+      <label class="fld" for="asOf">Check from
+        <input type="date" id="asOf">
+      </label>
+      <label class="fld" for="windowSel">Show birthdays in
+        <select id="windowSel">
+          <option value="7">the next 7 days</option>
+          <option value="10">the next 10 days</option>
+          <option value="14">the next 2 weeks</option>
+          <option value="31">the next month</option>
+        </select>
+      </label>
+      <label class="fld" for="amSel">Account manager
+        <select id="amSel"></select>
+      </label>
+      <label class="fld" for="langSel">Message language
+        <select id="langSel">
+          <option value="en">English</option>
+          <option value="bm">Bahasa Melayu</option>
+          <option value="both">Both (BM + English)</option>
+        </select>
+      </label>
+      <label class="fld" for="orderSel">Dates in my file are
+        <select id="orderSel">
+          <option value="DMY">Day/Month (31/12/1985)</option>
+          <option value="MDY">Month/Day (12/31/1985)</option>
+        </select>
+      </label>
+      <label class="fld" for="senderIn">Sign-off if no manager
+        <input type="text" id="senderIn" placeholder="e.g. Sarah Lee">
+      </label>
+      <label class="fld" for="orgIn">Company on picture (optional)
+        <input type="text" id="orgIn" placeholder="e.g. your bank / team">
+      </label>
+    </div>
+  </section>
+
+  <section aria-labelledby="upH" class="cards-wrap" style="display:grid;gap:12px">
+    <div class="row between">
+      <h2 id="upH">Coming up</h2>
+      <button id="pdfBtn" type="button" class="primary">Download PDF list</button>
+    </div>
+    <div class="summary" id="summary"></div>
+    <div class="cards" id="cards"></div>
+  </section>
+
+  <section class="panel" id="fixPanel" hidden aria-labelledby="fixH">
+    <div class="row between">
+      <h2 id="fixH">Fix in your Excel</h2>
+      <span class="small muted">Nothing here is guessed. Fix these rows in your file, then load it again.</span>
+    </div>
+    <div class="scroll"><table class="fix"><thead><tr><th>Row</th><th>Customer</th><th>What to fix</th></tr></thead><tbody id="fixBody"></tbody></table></div>
+  </section>
+
+  <section class="panel">
+    <details class="guide">
+      <summary>How to use (every Monday, about 5 minutes)</summary>
+      <ol>
+        <li>Keep one Excel file with these columns: <b>Customer Name, Company, Birthday, Phone, Email, Account Manager</b>. Tap <b>Get Excel template</b> for a blank one. An optional <b>Greeting Name</b> column (for example "Dato' Lim") is used in the message instead of the full name.</li>
+        <li>Tap <b>Load Excel / CSV</b>, check the columns, then tap <b>Use this list</b>. The list stays on this device, so next week you only reload it if the file changed.</li>
+        <li>Orange cards are birthdays within <b>3 days</b>: send these now. Pick a language, edit the message if you like.</li>
+        <li><b>WhatsApp:</b> tap <b>Copy picture</b> (or <b>Save picture</b>), then <b>Open WhatsApp</b>. The message is already typed; paste or attach the picture and press send. <b>Email:</b> tap <b>Copy message</b> and paste it, with the picture, into your email.</li>
+        <li>After you send, tap <b>Mark as sent</b>. The card turns green so nobody in the team sends twice on this device.</li>
+        <li>Tap <b>Download PDF list</b> to share the week's list with your team. Each customer has the picture and the message, ready to copy.</li>
+        <li>Rows in <b>Fix in your Excel</b> are left out until you correct them. The app never guesses a birthday.</li>
+      </ol>
+    </details>
+  </section>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script>
+(function(){
+"use strict";
+/* ---------- storage (per device, optional) ---------- */
+const store={
+  get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},
+  set(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){return false}},
+  del(k){try{localStorage.removeItem(k)}catch(e){}}
+};
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+const MN=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const DAYS=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const MONTHS={jan:1,januari:1,january:1,feb:2,februari:2,february:2,mac:3,mar:3,march:3,apr:4,april:4,mei:5,may:5,jun:6,june:6,julai:7,jul:7,july:7,ogos:8,aug:8,august:8,sep:9,sept:9,september:9,okt:10,oct:10,oktober:10,october:10,nov:11,november:11,dis:12,dec:12,disember:12,december:12};
+
+const S={
+  settings:Object.assign({windowDays:14,am:"",lang:"en",order:"DMY",sender:"",org:""},store.get("cbr.settings",{})),
+  saved:store.get("cbr.list",null),
+  sent:store.get("cbr.sent",{}),
+  prefs:store.get("cbr.prefs",{}),
+  edits:{},customers:[],problems:[],view:[],pending:null,canvases:{}
+};
+function saveSettings(){store.set("cbr.settings",S.settings)}
+
+/* ---------- toast ---------- */
+let tt;function toast(m){const t=$("#toast");t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,3800)}
+
+/* ---------- downloads (artifact capability, or plain link when opened as a local file) ---------- */
+let dl=null;const inViewer=!!(window.claude&&typeof window.claude.use==="function");
+if(inViewer){window.claude.use("downloads").then(n=>{dl=n}).catch(()=>{})}
+async function saveFile(filename,blob){
+  if(dl){
+    try{await dl.save({filename,data:blob});toast("Saved "+filename)}
+    catch(e){const c=e&&e.code;toast(c==="declined"?"Not saved.":c==="rate_limited"?"A save is already waiting for your answer.":"Saving files is not available in this view.")}
+    return;
+  }
+  if(inViewer){toast("Saving files is not available in this view.");return}
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=filename;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},5000);toast("Downloading "+filename);
+}
+async function copyText(t){
+  try{await navigator.clipboard.writeText(t);toast("Copied. Paste it into WhatsApp or email.");return true}
+  catch(e){toast("Copy was blocked here. Select the text and copy it by hand.");return false}
+}
+
+/* ---------- parsing ---------- */
+const norm=s=>String(s??"").toLowerCase().replace(/[^a-z0-9]/g,"");
+const leap=y=>(y%4===0&&y%100!==0)||y%400===0;
+const dim=(m,y)=>new Date(y||2000,m,0).getDate();
+function yr(s){if(!s)return null;let y=+s;if(s.length===2){const cur=new Date().getFullYear()%100;y=y>cur?1900+y:2000+y}return y}
+function chk(d,m,y,raw){
+  if(!(m>=1&&m<=12))return{error:`Birthday "${raw}" has no valid month`};
+  if(!(d>=1&&d<=dim(m,y)))return{error:`Birthday "${raw}" is not a real date`};
+  if(y&&(y<1900||y>new Date().getFullYear()))return{error:`Birthday "${raw}" has a year that looks wrong`};
+  return{d,m,y};
+}
+function parseBirthday(v,order){
+  if(v===null||v===undefined||String(v).trim()==="")return{error:"Birthday is empty"};
+  if(typeof v==="number"){
+    if(v>0&&v<80000){const p=XLSX.SSF.parse_date_code(v);if(p&&p.y)return chk(p.d,p.m,p.y,MN[p.m-1]+" "+p.d+", "+p.y)}
+    return{error:`Birthday "${v}" is not a date`};
+  }
+  const s=String(v).trim().replace(/\s+/g," ");let m;
+  if(/^\d{5}(\.\d+)?$/.test(s))return parseBirthday(Number(s),order);
+  if((m=s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})(?:[T ].*)?$/)))return chk(+m[3],+m[2],+m[1],s);
+  if((m=s.match(/^(\d{1,2})[-\/.](\d{1,2})(?:[-\/.](\d{2}|\d{4}))?$/))){
+    const a=+m[1],b=+m[2];const d=order==="MDY"?b:a,mo=order==="MDY"?a:b;
+    const r=chk(d,mo,yr(m[3]),s);
+    if(!r.error&&a<=12&&b<=12&&a!==b)r.note=`Birthday "${s}" was read as ${d} ${MN[mo-1]} (${order==="MDY"?"month/day":"day/month"}). Please check.`;
+    return r;
+  }
+  if((m=s.match(/^(\d{1,2})(?:st|nd|rd|th)?[\s\-\/.]*([A-Za-z]+)\.?,?[\s\-\/.]*(\d{2}|\d{4})?$/))){const mo=MONTHS[m[2].toLowerCase()];if(mo)return chk(+m[1],mo,yr(m[3]),s)}
+  if((m=s.match(/^([A-Za-z]+)\.?[\s\-\/.]*(\d{1,2})(?:st|nd|rd|th)?,?[\s\-\/.]*(\d{4})?$/))){const mo=MONTHS[m[1].toLowerCase()];if(mo)return chk(+m[2],mo,yr(m[3]),s)}
+  return{error:`Birthday "${s}" is not a date the app can read`};
+}
+function parsePhone(v){
+  const raw=String(v??"").trim();if(!raw)return{raw:"",wa:null};
+  const parts=raw.split(/\s*(?:[\/,;]|\bor\b|&)\s*/i).filter(Boolean);const s=parts[0];
+  const plus=s.startsWith("+");const dg=s.replace(/\D/g,"");let wa=null;
+  if(plus){if(dg.length>=8&&dg.length<=15)wa=dg}
+  else if(dg.startsWith("60")&&(dg.length===11||dg.length===12))wa=dg;
+  else if(dg.startsWith("0")&&(dg.length===10||dg.length===11))wa="6"+dg;
+  else if(dg.startsWith("1")&&(dg.length===9||dg.length===10))wa="60"+dg;
+  const out={raw,wa};
+  if(!wa)out.error=`Phone "${raw}" looks incomplete.`;
+  else{
+    const n=[];if(parts.length>1)n.push(`More than one phone number; using the first (${s}).`);
+    if(wa.startsWith("60")&&!wa.startsWith("601"))n.push(`Phone "${s}" looks like an office line; WhatsApp may not work.`);
+    if(n.length)out.note=n.join(" ");
+  }
+  return out;
+}
+function fmtPhone(wa){if(!wa)return"";if(wa.startsWith("60")){const k=wa.length===12?8:7;return"+60 "+wa.slice(2,4)+"-"+wa.slice(4,k)+" "+wa.slice(k)}return"+"+wa}
+
+const FIELDS=[
+  {k:"name",label:"Customer name",req:true,syn:["customername","name","clientname","nama","fullname","customer","client","namapelanggan"]},
+  {k:"birthday",label:"Birthday",req:true,syn:["birthday","birthdate","dateofbirth","dob","tarikhlahir","bday","birthdaydate","harijadi"]},
+  {k:"company",label:"Company",syn:["company","companyname","organisation","organization","syarikat","employer","business","namasyarikat"]},
+  {k:"phone",label:"Phone",syn:["phone","mobile","hp","handphone","phoneno","phonenumber","mobileno","contact","contactno","contactnumber","tel","telephone","whatsapp","notelefon","nohp"]},
+  {k:"email",label:"Email",syn:["email","emailaddress","emel","mail"]},
+  {k:"am",label:"Account manager",syn:["accountmanager","am","rm","relationshipmanager","manager","officer","agent","owner","salesperson","advisor","pic"]},
+  {k:"greet",label:"Greeting name (optional)",syn:["greetingname","greeting","preferredname","salutation","nickname","callname","namapanggilan"]}
+];
+function guessMap(hdr){
+  const H=hdr.map(norm),map={},used=new Set();
+  for(const f of FIELDS){
+    let i=H.findIndex((h,ix)=>!used.has(ix)&&f.syn.includes(h));
+    if(i<0)i=H.findIndex((h,ix)=>!used.has(ix)&&h&&f.syn.some(s=>s.length>3&&h.includes(s)));
+    map[f.k]=i;if(i>=0)used.add(i);
+  }
+  return map;
+}
+function findHeader(rows){
+  let best=0,score=-1;
+  for(let i=0;i<Math.min(rows.length,12);i++){
+    const m=guessMap(rows[i]||[]);const sc=Object.values(m).filter(x=>x>=0).length+(m.name>=0&&m.birthday>=0?5:0);
+    if(sc>score){score=sc;best=i}
+  }
+  return best;
+}
+function build(saved){
+  const {rows,headerRow,map}=saved;const order=S.settings.order;const customers=[],problems=[],seen=new Map();
+  for(let r=headerRow+1;r<rows.length;r++){
+    const row=rows[r]||[];const cell=f=>map[f]>=0?row[map[f]]:"";const txt=f=>String(cell(f)??"").trim().replace(/\s+/g," ");
+    if(row.every(v=>String(v??"").trim()===""))continue;
+    const rowNo=r+1,name=txt("name");
+    if(!name){problems.push({row:rowNo,name:"(no name)",level:"fix",issue:"Customer name is empty, so this row was skipped."});continue}
+    const b=parseBirthday(cell("birthday"),order);
+    if(b.error){problems.push({row:rowNo,name,level:"fix",issue:b.error+". No reminder until this is fixed."});continue}
+    const key=norm(name)+"|"+b.d+"-"+b.m;
+    if(seen.has(key)){problems.push({row:rowNo,name,level:"fix",issue:`Same name and birthday as row ${seen.get(key)}. Shown once so the wish is not sent twice.`});continue}
+    seen.set(key,rowNo);
+    const notes=[];if(b.note)notes.push(b.note);
+    const ph=parsePhone(cell("phone"));if(ph.error)notes.push(ph.error+" The WhatsApp button is off for this customer.");if(ph.note)notes.push(ph.note);
+    let email=txt("email");
+    if(email&&!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)){notes.push(`Email "${email}" looks incomplete.`);email=""}
+    if(!ph.wa&&!email)notes.push("No working phone or email. Add one to send the wish.");
+    const am=txt("am");if(!am)notes.push("No account manager. The message is signed with the sign-off name in the settings.");
+    if(b.m===2&&b.d===29)notes.push("Born on 29 Feb. In non-leap years the reminder uses 28 Feb.");
+    customers.push({key,row:rowNo,name,greet:txt("greet")||name,company:txt("company"),d:b.d,m:b.m,y:b.y,phone:ph.raw,wa:ph.wa,email,am,notes});
+    if(notes.length)problems.push({row:rowNo,name,level:"check",issue:notes.join(" ")});
+  }
+  return{customers,problems};
+}
+
+/* ---------- dates ---------- */
+function todayISO(){const t=new Date();return t.getFullYear()+"-"+String(t.getMonth()+1).padStart(2,"0")+"-"+String(t.getDate()).padStart(2,"0")}
+function asOf(){const v=$("#asOf").value||todayISO();const [y,m,d]=v.split("-").map(Number);return new Date(y,m-1,d)}
+function occ(c,from){
+  for(const y of [from.getFullYear()-1,from.getFullYear(),from.getFullYear()+1]){
+    let d=c.d;if(c.m===2&&d===29&&!leap(y))d=28;
+    const dt=new Date(y,c.m-1,d);const days=Math.round((dt-from)/864e5);
+    if(days>=-3)return{date:dt,days,y};
+  }
+}
+const fmtDate=dt=>DAYS[dt.getDay()]+" "+dt.getDate()+" "+MN[dt.getMonth()]+" "+dt.getFullYear();
+const iso=dt=>dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0");
+function whenLabel(days){
+  if(days<0)return`Missed ${-days} day${days===-1?"":"s"} ago`;
+  if(days===0)return"Today";if(days===1)return"Tomorrow";
+  if(days<=3)return`In ${days} days · send now`;return`In ${days} days`;
+}
+
+/* ---------- messages ---------- */
+const T={
+  en:[
+    (n,co)=>[`Dear ${n},\n\nWishing you a very happy birthday! Thank you for your continued trust and support. May the year ahead bring you good health, happiness and success${co?`, for you and everyone at ${co}`:""}.`,"Warm regards"],
+    (n,co)=>[`Happy Birthday, ${n}!\n\nOn your special day, I would like to thank you for the good working relationship we share. Wishing you joy, good health and a wonderful year ahead.`,"Best wishes"],
+    (n,co)=>[`Dear ${n},\n\nMany happy returns of the day! It has been a pleasure working with you${co?` and the team at ${co}`:""}. I hope you have a lovely celebration and a great year ahead.`,"Kind regards"]
+  ],
+  bm:[
+    (n,co)=>[`Salam sejahtera ${n},\n\nSelamat Hari Jadi! Terima kasih atas kepercayaan dan sokongan anda selama ini. Semoga anda sentiasa sihat, bahagia dan terus maju jaya${co?` bersama ${co}`:""}.`,"Salam mesra"],
+    (n,co)=>[`Selamat Hari Jadi, ${n}!\n\nSempena hari istimewa ini, saya ingin mengucapkan terima kasih atas hubungan kerja yang baik antara kita. Semoga hari anda dipenuhi kegembiraan dan tahun yang mendatang membawa kesihatan serta kejayaan.`,"Yang ikhlas"],
+    (n,co)=>[`Salam sejahtera ${n},\n\nSelamat Hari Lahir! Semoga anda dikurniakan kesihatan yang baik, kebahagiaan dan kejayaan sepanjang tahun ini. Terima kasih kerana terus memberi kepercayaan kepada kami.`,"Salam hormat"]
+  ],
+  enLate:[(n)=>[`Dear ${n},\n\nA belated happy birthday! I hope you had a wonderful day. Thank you for your continued trust, and best wishes for a healthy and successful year ahead.`,"Warm regards"]],
+  bmLate:[(n)=>[`Salam sejahtera ${n},\n\nSelamat Hari Jadi, walaupun agak terlewat! Semoga anda telah meraikan hari istimewa itu dengan gembira. Terima kasih atas kepercayaan anda, dan semoga tahun ini membawa kesihatan serta kejayaan.`,"Salam mesra"]]
+};
+function hash(s){let h=2166136261;for(const ch of s){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0}
+const signer=c=>c.am||S.settings.sender||"[Your name]";
+function prefs(c){const p=S.prefs[c.key]||{};return{lang:p.lang||S.settings.lang,variant:p.variant??hash(c.key)%3,design:p.design??hash(c.key+"d")%3}}
+function setPref(c,patch){S.prefs[c.key]=Object.assign({},S.prefs[c.key],patch);store.set("cbr.prefs",S.prefs)}
+function message(c,o,lang,variant){
+  const late=o.days<0,n=c.greet,co=c.company;const pick=k=>{const a=T[late?k+"Late":k];return a[variant%a.length](n,co)};
+  if(lang==="both"){const [bm]=pick("bm");const [en,close]=pick("en");return`${bm}\n\n${en}\n\n${close},\n${signer(c)}`}
+  const [main,close]=pick(lang);return`${main}\n\n${close},\n${signer(c)}`;
+}
+function subject(c,o,lang){
+  const n=c.greet;if(o.days<0)return lang==="bm"?`Selamat Hari Jadi (terlewat), ${n}`:lang==="both"?`Selamat Hari Jadi / Belated Birthday Wishes, ${n}`:`Belated Birthday Wishes, ${n}`;
+  return lang==="bm"?`Selamat Hari Jadi, ${n}!`:lang==="both"?`Selamat Hari Jadi / Happy Birthday, ${n}!`:`Happy Birthday, ${n}!`;
+}
+const editKey=(c,o,lang)=>c.key+"|"+o.y+"|"+lang;
+function currentText(item){const p=prefs(item.c);return S.edits[editKey(item.c,item.o,p.lang)]??message(item.c,item.o,p.lang,p.variant)}
+
+/* ---------- birthday picture ---------- */
+const DESIGNS=[
+  {bg:["#FDEFF2","#F4CFDA"],ink:"#7A2848",soft:"#A9607A",acc:["#E0A458","#D9738F","#F7C9D6","#B9D7C9"],deco:"confetti"},
+  {bg:["#EFF6F0","#CFE5D5"],ink:"#2C5845",soft:"#5A8A75",acc:["#F2B880","#E58F72","#F6D88E","#9CC5A1"],deco:"balloons"},
+  {bg:["#EFF2FB","#D3DCF3"],ink:"#2B3F73",soft:"#5D6FA3",acc:["#E9C46A","#F2D9A0","#A9B8E8","#E7A6B9"],deco:"stars"}
+];
+function rng(seed){let s=(seed>>>0)||7;return()=>{s^=s<<13;s^=s>>>17;s^=s<<5;return((s>>>0)%100000)/100000}}
+function rr(x,X,Y,W,H,R){x.beginPath();x.moveTo(X+R,Y);x.arcTo(X+W,Y,X+W,Y+H,R);x.arcTo(X+W,Y+H,X,Y+H,R);x.arcTo(X,Y+H,X,Y,R);x.arcTo(X,Y,X+W,Y,R);x.closePath()}
+function fitSize(x,text,tmpl,max,hi,lo){let s=hi;for(;s>lo;s-=2){x.font=tmpl.replace("{s}",s);if(x.measureText(text).width<=max)break}x.font=tmpl.replace("{s}",s);return s}
+function fitLines(x,text,tmpl,max,hi,lo){
+  const s=fitSize(x,text,tmpl,max,hi,lo);if(x.measureText(text).width<=max)return{size:s,lines:[text]};
+  const w=text.split(" ");let best=[text],bd=1e9;
+  for(let i=1;i<w.length;i++){const a=w.slice(0,i).join(" "),b=w.slice(i).join(" ");const d=Math.abs(a.length-b.length);if(d<bd){bd=d;best=[a,b]}}
+  let size=hi;for(;size>36;size-=2){x.font=tmpl.replace("{s}",size);if(best.every(l=>x.measureText(l).width<=max))break}
+  x.font=tmpl.replace("{s}",size);return{size,lines:best};
+}
+function star(x,cx,cy,R,r){x.beginPath();for(let i=0;i<10;i++){const a=-Math.PI/2+i*Math.PI/5,rad=i%2?r:R;x.lineTo(cx+Math.cos(a)*rad,cy+Math.sin(a)*rad)}x.closePath();x.fill()}
+function balloon(x,cx,cy,R,col,str){
+  x.strokeStyle=str;x.lineWidth=3;x.beginPath();x.moveTo(cx,cy+R*1.18);x.bezierCurveTo(cx-14,cy+R*1.6,cx+14,cy+R*1.9,cx,cy+R*2.3);x.stroke();
+  x.fillStyle=col;x.beginPath();x.ellipse(cx,cy,R*.86,R*1.08,0,0,Math.PI*2);x.fill();
+  x.beginPath();x.moveTo(cx,cy+R*1.04);x.lineTo(cx-9,cy+R*1.2);x.lineTo(cx+9,cy+R*1.2);x.closePath();x.fill();
+  x.fillStyle="rgba(255,255,255,.4)";x.beginPath();x.ellipse(cx-R*.32,cy-R*.4,R*.18,R*.3,-.5,0,Math.PI*2);x.fill();
+}
+function drawCard(cv,o){
+  const Z=1080;cv.width=Z;cv.height=Z;const x=cv.getContext("2d");const D=DESIGNS[o.design%3];const r=rng(o.seed);
+  const g=x.createLinearGradient(0,0,Z,Z);g.addColorStop(0,D.bg[0]);g.addColorStop(1,D.bg[1]);x.fillStyle=g;x.fillRect(0,0,Z,Z);
+  if(D.deco==="confetti"){
+    for(let i=0;i<110;i++){const px=r()*Z,py=r()*Z;if(px>90&&px<990&&py>250&&py<1000)continue;
+      x.save();x.globalAlpha=.9;x.fillStyle=D.acc[i%4];x.translate(px,py);x.rotate(r()*Math.PI);
+      if(i%3===0){x.fillRect(-11,-4,22,8)}else{x.beginPath();x.arc(0,0,5+r()*6,0,Math.PI*2);x.fill()}x.restore()}
+  }else if(D.deco==="balloons"){
+    balloon(x,150,150,52,D.acc[1],D.soft);balloon(x,235,120,44,D.acc[2],D.soft);balloon(x,930,150,52,D.acc[0],D.soft);balloon(x,845,118,42,D.acc[3],D.soft);
+    for(let i=0;i<26;i++){const px=120+r()*840,py=980+r()*55;x.fillStyle=D.acc[i%4];x.beginPath();x.arc(px,py,4+r()*4,0,Math.PI*2);x.fill()}
+  }else{
+    for(let i=0;i<34;i++){const px=80+r()*920,py=70+r()*190;x.fillStyle=D.acc[i%4];const R=8+r()*16;star(x,px,py,R,R*.45)}
+    for(let i=0;i<14;i++){const px=80+r()*920,py=985+r()*45;x.fillStyle=D.acc[i%4];star(x,px,py,7+r()*7,4)}
+  }
+  x.strokeStyle="rgba(255,255,255,.8)";x.lineWidth=6;rr(x,46,46,Z-92,Z-92,36);x.stroke();
+  x.textAlign="center";x.textBaseline="alphabetic";
+  fitSize(x,o.title,'700 {s}px "Dancing Script", "Brush Script MT", cursive',860,172,70);x.fillStyle=D.ink;x.fillText(o.title,Z/2,o.sub?420:450);
+  let y=o.sub?492:505;
+  if(o.sub){x.font='600 40px Outfit, "Segoe UI", sans-serif';x.fillStyle=D.soft;x.fillText(o.sub,Z/2,y)}
+  const nm=fitLines(x,o.name,'700 {s}px Outfit, "Segoe UI", sans-serif',820,92,50);x.fillStyle=D.ink;
+  y+=nm.size*1.35;for(const l of nm.lines){x.fillText(l,Z/2,y);y+=nm.size*1.12}
+  y+=10;x.fillStyle=D.acc[0];x.fillRect(Z/2-40,y-nm.size*.5,80,5);
+  y+=74;x.font='500 36px Inter, "Segoe UI", sans-serif';x.fillStyle=D.soft;x.fillText(o.from,Z/2,y);
+  y+=62;fitSize(x,o.signer,'600 {s}px Outfit, "Segoe UI", sans-serif',800,52,30);x.fillStyle=D.ink;x.fillText(o.signer,Z/2,y);
+  if(o.org){y+=46;fitSize(x,o.org,'500 {s}px Inter, "Segoe UI", sans-serif',800,30,22);x.fillStyle=D.soft;x.fillText(o.org,Z/2,y)}
+}
+function cardOpts(item){
+  const p=prefs(item.c),L=p.lang;
+  return{design:p.design,seed:hash(item.c.key),name:item.c.greet,signer:signer(item.c),org:S.settings.org.trim(),
+    title:L==="bm"?"Selamat Hari Jadi":L==="both"?"Selamat Hari Jadi":"Happy Birthday",
+    sub:L==="both"?"Happy Birthday":"",from:L==="bm"?"Ikhlas daripada":"With warm wishes from"};
+}
+function paintCard(i){
+  const item=S.view[i];if(!item)return;const cv=document.createElement("canvas");drawCard(cv,cardOpts(item));S.canvases[i]=cv;
+  const img=document.getElementById("img-"+i);if(!img)return;
+  cv.toBlob(b=>{if(!b)return;if(img.dataset.url)URL.revokeObjectURL(img.dataset.url);const u=URL.createObjectURL(b);img.dataset.url=u;img.src=u},"image/png");
+}
+
+/* ---------- rendering ---------- */
+function rebuild(){
+  if(S.saved){const r=build(S.saved);S.customers=r.customers;S.problems=r.problems}else{S.customers=[];S.problems=[]}
+  renderStatus();renderAM();render();
+}
+function renderStatus(){
+  const st=$("#listStatus");
+  if(!S.saved){st.innerHTML='<span class="muted">No list loaded yet. Load your Excel file, or try the sample to see how it works.</span>';return}
+  const when=new Date(S.saved.loadedAt);
+  st.innerHTML=(S.saved.sample?'<span class="pill p-warn">Sample data: made-up customers</span> ':"")+
+    `<b>${S.customers.length}</b> customers from <b>${esc(S.saved.fileName)}</b> · loaded ${when.getDate()} ${MN[when.getMonth()]} ${when.getFullYear()}`+
+    (S.problems.filter(p=>p.level==="fix").length?` · <span style="color:var(--danger)">${S.problems.filter(p=>p.level==="fix").length} rows need fixing</span>`:"");
+}
+function renderAM(){
+  const ams=[...new Set(S.customers.map(c=>c.am).filter(Boolean))].sort();const sel=$("#amSel");
+  const has=S.customers.some(c=>!c.am);
+  sel.innerHTML='<option value="">Everyone</option>'+ams.map(a=>`<option value="${esc(a)}">${esc(a)}</option>`).join("")+(has?'<option value="__none">(No manager listed)</option>':"");
+  if(S.settings.am&&(ams.includes(S.settings.am)||S.settings.am==="__none"))sel.value=S.settings.am;else{sel.value="";S.settings.am=""}
+}
+function computeView(){
+  const from=asOf(),out=[];
+  for(const c of S.customers){
+    if(S.settings.am==="__none"&&c.am)continue;if(S.settings.am&&S.settings.am!=="__none"&&c.am!==S.settings.am)continue;
+    const o=occ(c,from);if(!o)continue;const sent=!!S.sent[c.key+"|"+o.y];
+    if(o.days<0&&sent)continue;if(o.days>S.settings.windowDays)continue;out.push({c,o,sent});
+  }
+  out.sort((a,b)=>a.o.days-b.o.days||a.c.name.localeCompare(b.c.name));return out;
+}
+function render(){
+  S.view=computeView();S.canvases={};
+  const v=S.view,now=v.filter(i=>!i.sent&&i.o.days<=3),later=v.filter(i=>!i.sent&&i.o.days>3),done=v.filter(i=>i.sent);
+  const fixN=S.problems.filter(p=>p.level==="fix").length,chkN=S.problems.filter(p=>p.level==="check").length;
+  $("#summary").innerHTML=S.saved?
+    `<span class="pill p-urgent"><b>${now.length}</b> send now (within 3 days)</span><span class="pill p-accent"><b>${later.length}</b> coming up</span><span class="pill p-ok"><b>${done.length}</b> sent</span>`+
+    (fixN?`<span class="pill p-danger"><b>${fixN}</b> rows to fix</span>`:"")+(chkN?`<span class="pill p-warn"><b>${chkN}</b> to double-check</span>`:""):"";
+  $("#pdfBtn").disabled=!v.length;
+  const box=$("#cards");
+  if(!S.saved){box.innerHTML=`<div class="panel empty"><h3>Nothing to show yet</h3><p>Load your customer Excel file, or tap <b>Try with sample customers</b> to see a test run.</p></div>`}
+  else if(!v.length){box.innerHTML=`<div class="panel empty"><h3>No birthdays in this period</h3><p>Nobody${S.settings.am?" for this account manager":""} has a birthday in ${esc($("#windowSel").selectedOptions[0].text)}. Try a longer period.</p></div>`}
+  else box.innerHTML=v.map((it,i)=>cardHTML(it,i)).join("");
+  v.forEach((_,i)=>paintCard(i));
+  const fb=$("#fixBody");$("#fixPanel").hidden=!S.problems.length;
+  fb.innerHTML=S.problems.slice().sort((a,b)=>(a.level===b.level?0:a.level==="fix"?-1:1)||a.row-b.row).map(p=>
+    `<tr><td>${p.row}</td><td>${esc(p.name)}</td><td><span class="pill ${p.level==="fix"?"p-danger":"p-warn"}" style="font-size:11px;padding:2px 8px">${p.level==="fix"?"Left out":"Check"}</span> ${esc(p.issue)}</td></tr>`).join("");
+}
+function cardHTML(it,i){
+  const {c,o,sent}=it,p=prefs(c),txt=currentText(it);const urgent=!sent&&o.days<=3;
+  const chip=sent?'<span class="pill p-ok">Sent ✓</span>':`<span class="pill ${o.days<0?"p-danger":urgent?"p-urgent":"p-accent"}">${whenLabel(o.days)}</span>`;
+  const seg=["en","bm","both"].map(l=>`<button type="button" data-act="lang" data-i="${i}" data-v="${l}" aria-pressed="${p.lang===l}">${l==="en"?"English":l==="bm"?"BM":"BM + EN"}</button>`).join("");
+  const wa=c.wa?`<a class="btn wa" data-act="wa" data-i="${i}" href="https://wa.me/${c.wa}" target="_blank" rel="noopener">Open WhatsApp</a>`:`<span class="btn" aria-disabled="true" title="No valid phone number">WhatsApp (no number)</span>`;
+  const mail=c.email?`<a class="btn" data-act="mail" data-i="${i}" href="mailto:${esc(c.email)}">Open email</a>`:"";
+  return`<article class="card ${urgent?"is-urgent":""} ${sent?"is-sent":""}" id="card-${i}">
+  <div class="card-top"><div class="who"><h3>${esc(c.name)}</h3><p class="small muted">${esc(c.company||"No company listed")}</p></div>${chip}</div>
+  <dl class="meta">
+    <div><dt>Birthday</dt><dd>${fmtDate(o.date)}</dd></div>
+    <div><dt>Manager</dt><dd>${esc(c.am||"Not listed")}</dd></div>
+    <div><dt>Phone</dt><dd>${c.wa?esc(fmtPhone(c.wa)):esc(c.phone||"None")}</dd></div>
+    <div><dt>Email</dt><dd>${esc(c.email||"None")}</dd></div>
+  </dl>
+  ${c.notes.length?`<div class="notes">${c.notes.map(n=>`<div class="note">${esc(n)}</div>`).join("")}</div>`:""}
+  <div class="compose">
+    <div class="pic">
+      <img id="img-${i}" alt="Birthday picture for ${esc(c.greet)}">
+      <div class="row"><button type="button" data-act="copyimg" data-i="${i}">Copy picture</button><button type="button" data-act="saveimg" data-i="${i}">Save picture</button></div>
+      <button type="button" class="ghost" data-act="design" data-i="${i}">Change picture style</button>
+    </div>
+    <div class="msg">
+      <div class="seg" role="group" aria-label="Language">${seg}</div>
+      <textarea id="msg-${i}" data-i="${i}" aria-label="Message for ${esc(c.name)}">${esc(txt)}</textarea>
+      <p class="subject">Email subject: <b>${esc(subject(c,o,p.lang))}</b></p>
+      <div class="row">
+        <button type="button" class="primary" data-act="copymsg" data-i="${i}">Copy message</button>
+        ${wa}${mail}
+        <button type="button" class="ghost" data-act="variant" data-i="${i}">Another wording</button>
+      </div>
+      <div class="row" id="sentRow-${i}">
+        ${sent?`<button type="button" class="ghost" data-act="unsent" data-i="${i}">Undo "sent"</button>`:`<button type="button" data-act="askSent" data-i="${i}">Mark as sent</button>`}
+      </div>
+    </div>
+  </div>
+</article>`;
+}
+
+/* ---------- card actions ---------- */
+document.addEventListener("click",e=>{
+  const b=e.target.closest("[data-act]");if(!b)return;const i=+b.dataset.i,it=S.view[i];if(!it)return;const c=it.c,act=b.dataset.act;
+  const text=()=>$("#msg-"+i).value;
+  if(act==="lang"){setPref(c,{lang:b.dataset.v});render();document.getElementById("card-"+i)?.scrollIntoView({block:"nearest"})}
+  else if(act==="variant"){const p=prefs(c);delete S.edits[editKey(c,it.o,p.lang)];setPref(c,{variant:p.variant+1});$("#msg-"+i).value=currentText(it)}
+  else if(act==="design"){setPref(c,{design:prefs(c).design+1});paintCard(i)}
+  else if(act==="copymsg"){copyText(text())}
+  else if(act==="wa"){b.href=`https://wa.me/${c.wa}?text=${encodeURIComponent(text())}`;toast("WhatsApp opens with the message typed. Paste or attach the picture, then press send.")}
+  else if(act==="mail"){b.href=`mailto:${c.email}?subject=${encodeURIComponent(subject(c,it.o,prefs(c).lang))}&body=${encodeURIComponent(text())}`}
+  else if(act==="copyimg"){
+    const cv=S.canvases[i];if(!cv)return;
+    try{
+      if(!window.ClipboardItem||!navigator.clipboard?.write)throw 0;
+      navigator.clipboard.write([new ClipboardItem({"image/png":new Promise(r=>cv.toBlob(r,"image/png"))})])
+        .then(()=>toast("Picture copied. Paste it into the WhatsApp chat or email."))
+        .catch(()=>toast("This browser blocked copying the picture. Tap Save picture, or press and hold the picture to save it."));
+    }catch(_){toast("This browser can't copy pictures. Tap Save picture, or press and hold the picture to save it.")}
+  }
+  else if(act==="saveimg"){const cv=S.canvases[i];if(!cv)return;cv.toBlob(bl=>saveFile(`Birthday_${c.greet.replace(/[^\w]+/g,"_").replace(/^_|_$/g,"")}.png`,bl),"image/png")}
+  else if(act==="askSent"){
+    $("#sentRow-"+i).innerHTML=`<div class="confirm"><span>Did you send the wish to <b>${esc(c.name)}</b>?</span><button type="button" class="primary" data-act="sent" data-i="${i}">Yes, mark as sent</button><button type="button" data-act="cancelSent" data-i="${i}">Cancel</button></div>`;
+  }
+  else if(act==="cancelSent"){$("#sentRow-"+i).innerHTML=`<button type="button" data-act="askSent" data-i="${i}">Mark as sent</button>`}
+  else if(act==="sent"){S.sent[c.key+"|"+it.o.y]=new Date().toISOString();store.set("cbr.sent",S.sent);toast(`Marked ${c.name} as sent.`);render()}
+  else if(act==="unsent"){delete S.sent[c.key+"|"+it.o.y];store.set("cbr.sent",S.sent);toast(`${c.name} is back on the to-send list.`);render()}
+});
+document.addEventListener("input",e=>{
+  if(e.target.matches("textarea[data-i]")){const it=S.view[+e.target.dataset.i];if(it)S.edits[editKey(it.c,it.o,prefs(it.c).lang)]=e.target.value}
+});
+
+/* ---------- import ---------- */
+$("#fileIn").addEventListener("change",async e=>{
+  const f=e.target.files[0];e.target.value="";if(!f)return;const ext=(f.name.split(".").pop()||"").toLowerCase();const msg=$("#importMsg");msg.hidden=true;
+  if(["pdf","png","jpg","jpeg"].includes(ext)){
+    msg.innerHTML=`<b>${esc(f.name)}</b> is a ${ext.toUpperCase()} file. To keep birthdays accurate, this app only reads Excel or CSV. Send the ${ext.toUpperCase()} to Claude and ask: "Convert this customer list into the Birthday Reminder Excel template." Then load that Excel here.`;
+    msg.hidden=false;return;
+  }
+  if(typeof XLSX==="undefined"){msg.textContent="The Excel reader did not load. Check your internet connection and reload the page.";msg.hidden=false;return}
+  try{
+    const wb=XLSX.read(await f.arrayBuffer(),{type:"array",raw:true});
+    let rows=[];for(const n of wb.SheetNames){const r=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:""});if(r.length>1){rows=r;break}}
+    if(!rows.length)throw new Error("empty");
+    startReview({fileName:f.name,rows});
+  }catch(err){msg.textContent=`Could not read ${f.name}. Save it as .xlsx or .csv and try again.`;msg.hidden=false}
+});
+function startReview({fileName,rows,sample}){
+  const headerRow=findHeader(rows);const map=guessMap(rows[headerRow]||[]);
+  S.pending={fileName,rows,headerRow,map,sample:!!sample,loadedAt:new Date().toISOString()};
+  const hdr=rows[headerRow]||[];
+  $("#reviewInfo").textContent=`${fileName}: headings found on row ${headerRow+1}. Check each field points to the right column.`;
+  $("#mapFields").innerHTML=FIELDS.map(f=>`<label class="fld" for="map-${f.k}">${f.label}${f.req?" *":""}<select id="map-${f.k}" data-k="${f.k}"><option value="-1">(not in my file)</option>${hdr.map((h,ix)=>`<option value="${ix}" ${map[f.k]===ix?"selected":""}>${esc(String(h||"Column "+(ix+1)))}</option>`).join("")}</select></label>`).join("");
+  $("#review").hidden=false;reviewCounts();$("#review").scrollIntoView({behavior:"smooth",block:"start"});
+}
+$("#mapFields").addEventListener("change",e=>{if(e.target.dataset.k){S.pending.map[e.target.dataset.k]=+e.target.value;reviewCounts()}});
+function reviewCounts(){
+  const P=S.pending,ok=P.map.name>=0&&P.map.birthday>=0;$("#useBtn").disabled=!ok;
+  if(!ok){$("#reviewCounts").innerHTML='<span style="color:var(--danger)">Choose the Customer name and Birthday columns to continue.</span>';return}
+  const r=build(P);const fix=r.problems.filter(p=>p.level==="fix").length,chk=r.problems.filter(p=>p.level==="check").length;
+  $("#reviewCounts").innerHTML=`<b>${r.customers.length}</b> customers ready · <b>${fix}</b> rows left out (need fixing) · <b>${chk}</b> to double-check.`+(S.saved?` Using this file <b>replaces</b> the list now on this device (${esc(S.saved.fileName)}).`:"");
+}
+$("#useBtn").addEventListener("click",()=>{
+  S.saved=S.pending;S.pending=null;$("#review").hidden=true;
+  if(!store.set("cbr.list",S.saved))toast("List loaded. This browser won't keep it, so load the file again next time.");else toast("List loaded and saved on this device.");
+  rebuild();document.getElementById("upH").scrollIntoView({behavior:"smooth"});
+});
+$("#cancelImport").addEventListener("click",()=>{S.pending=null;$("#review").hidden=true});
+
+/* ---------- sample, template, remove ---------- */
+function xl(y,m,d){return(Date.UTC(y,m-1,d)-Date.UTC(1899,11,30))/864e5}
+function sampleRows(){
+  return[
+    ["Customer Name","Company","Birthday","Phone","Email","Account Manager"],
+    ["Puan Nurul Aisyah binti Hassan","Hassan Logistics Sdn Bhd","19/11/1984","012-334 5567","nurul.aisyah@hassanlogistics.example","Aiman Zulkifli"],
+    ["Mr Tan Wei Ming","Tanwei Hardware Trading",xl(1979,11,22),"0167788123","weiming@tanweihardware.example","Siti Farhana"],
+    ["Encik Ravi a/l Subramaniam","RS Engineering Works","21 Nov 1990","+60 17-882 1043","ravi@rseng.example","Aiman Zulkifli"],
+    ["Ms Michelle Lau","Lau & Partners","1988-11-25",198765432,"michelle.lau@laupartners.example","Siti Farhana"],
+    ["Dato' Lim Chee Keong","Keong Holdings Bhd","28/11/1965","012-678 9900","","Siti Farhana"],
+    ["Cik Farah Nadia","Nadia Bakery","Nov 27","","farah@nadiabakery.example",""],
+    ["Mr Kumar Raj","KR Motors","31/02/1987","012-998 1122","kumar@krmotors.example","Aiman Zulkifli"],
+    ["Mdm Wong Siew Lan","Wong Florist","","03-7781 2233","siewlan@wongflorist.example","Siti Farhana"],
+    ["Mr Tan Wei Ming","Tanwei Hardware Trading","22/11/1979","016-778 8123","weiming@tanweihardware.example","Siti Farhana"],
+    ["Encik Hafiz Rahman","HR Consult","16/11/1992","013-55 66","hafiz@hrconsult.example","Aiman Zulkifli"],
+    ["Mr Alex Teo","Teo Printing","01/12/1983","011-2345 6789","alex@teoprinting.example","Aiman Zulkifli"],
+    ["Ms Grace Ooi","Ooi Dental Clinic","05/12/1985","016 223 4455","grace@ooidental.example","Siti Farhana"],
+    ["Puan Zarina Ahmad","ZA Catering","12 Disember 1979","0112345678","zarina@zacatering","Aiman Zulkifli"],
+    ["","No Name Sdn Bhd","01/01/1980","012-111 2222","",""],
+    ["Mr Daniel Chong","Chong Architects","14/03/1980","012-555 0101","daniel@chongarch.example","Siti Farhana"]
+  ];
+}
+$("#sampleBtn").addEventListener("click",()=>{$("#importMsg").hidden=true;startReview({fileName:"Sample customers (made up)",rows:sampleRows(),sample:true})});
+$("#templateBtn").addEventListener("click",()=>{
+  if(typeof XLSX==="undefined"){toast("The Excel tool did not load. Check your internet and reload.");return}
+  const ws=XLSX.utils.aoa_to_sheet([["Customer Name","Company","Birthday","Phone","Email","Account Manager","Greeting Name"],["Encik Ahmad bin Ali","ABC Trading Sdn Bhd","15/03/1985","012-345 6789","ahmad@abctrading.com","Sarah Lee","Encik Ahmad"]]);
+  ws["!cols"]=[{wch:30},{wch:28},{wch:14},{wch:16},{wch:30},{wch:20},{wch:18}];
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Customers");
+  const out=XLSX.write(wb,{type:"array",bookType:"xlsx"});
+  saveFile("Customer_Birthday_Template.xlsx",new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+});
+$("#removeBtn").addEventListener("click",()=>{$("#removeConfirm").hidden=!S.saved;if(!S.saved)toast("There is no list on this device.")});
+$("#removeNo").addEventListener("click",()=>$("#removeConfirm").hidden=true);
+$("#removeYes").addEventListener("click",()=>{S.saved=null;S.sent={};S.prefs={};S.edits={};["cbr.list","cbr.sent","cbr.prefs"].forEach(store.del);$("#removeConfirm").hidden=true;toast("List removed from this device.");rebuild()});
+
+/* ---------- settings ---------- */
+$("#asOf").value=todayISO();
+$("#windowSel").value=String(S.settings.windowDays);if(!$("#windowSel").value){$("#windowSel").value="14";S.settings.windowDays=14}
+$("#langSel").value=S.settings.lang;$("#orderSel").value=S.settings.order;$("#senderIn").value=S.settings.sender;$("#orgIn").value=S.settings.org;
+const t0=new Date();$("#todayLbl").innerHTML=`Today<br><b style="color:var(--ink);font-family:var(--display);font-size:16px">${fmtDate(t0)}</b>`;
+$("#asOf").addEventListener("change",()=>{if(!$("#asOf").value)$("#asOf").value=todayISO();render()});
+$("#windowSel").addEventListener("change",e=>{S.settings.windowDays=+e.target.value;saveSettings();render()});
+$("#amSel").addEventListener("change",e=>{S.settings.am=e.target.value;saveSettings();render()});
+$("#langSel").addEventListener("change",e=>{S.settings.lang=e.target.value;for(const k in S.prefs)delete S.prefs[k].lang;store.set("cbr.prefs",S.prefs);saveSettings();render()});
+$("#orderSel").addEventListener("change",e=>{S.settings.order=e.target.value;saveSettings();rebuild()});
+let deb;const later=fn=>{clearTimeout(deb);deb=setTimeout(fn,350)};
+$("#senderIn").addEventListener("input",e=>{S.settings.sender=e.target.value.trim();saveSettings();later(render)});
+$("#orgIn").addEventListener("input",e=>{S.settings.org=e.target.value;saveSettings();later(()=>S.view.forEach((_,i)=>paintCard(i)))});
+
+/* ---------- PDF ---------- */
+$("#pdfBtn").addEventListener("click",async()=>{
+  if(!window.jspdf){toast("The PDF tool did not load. Check your internet and reload.");return}
+  const btn=$("#pdfBtn");btn.disabled=true;btn.textContent="Making PDF…";
+  try{const blob=buildPdf();const from=asOf(),to=new Date(from);to.setDate(to.getDate()+S.settings.windowDays);
+    await saveFile(`Customer_Birthdays_${iso(from)}_to_${iso(to)}.pdf`,blob)}
+  catch(err){console.error(err);toast("Could not make the PDF. Try again.")}
+  finally{btn.disabled=false;btn.textContent="Download PDF list"}
+});
+const pdfSafe=s=>String(s).replace(/[‘’]/g,"'").replace(/[“”]/g,'"').replace(/[–—]/g,"-").replace(/…/g,"...").replace(/[^\x09\x0A\x0D\x20-\x7E -ÿ]/g,"?");
+function buildPdf(){
+  const {jsPDF}=window.jspdf;const doc=new jsPDF({unit:"mm",format:"a4"});const W=210,H=297,M=14;let y=M;
+  const from=asOf(),to=new Date(from);to.setDate(to.getDate()+S.settings.windowDays);
+  const ink=[42,34,38],muted=[110,98,103],acc=[162,62,106],urg=[169,80,26];
+  const T=(t,x,yy,o)=>doc.text(pdfSafe(t),x,yy,o);
+  doc.setFont("helvetica","bold");doc.setFontSize(18);doc.setTextColor(...ink);T("Customer Birthday Reminder",M,y+6);
+  doc.setFont("helvetica","normal");doc.setFontSize(10);doc.setTextColor(...muted);
+  T(`Birthdays from ${fmtDate(from)} to ${fmtDate(to)}`+(S.settings.am?` · Account manager: ${S.settings.am==="__none"?"(none listed)":S.settings.am}`:" · All account managers"),M,y+13);
+  T(`List: ${S.saved.fileName}${S.saved.sample?" (SAMPLE - made-up customers)":""} · Made on ${fmtDate(new Date())}`,M,y+18);
+  y+=27;
+  const cols=[[M,"When"],[M+30,"Birthday"],[M+58,"Customer"],[M+118,"Company"],[M+162,"Manager"]];
+  doc.setFillColor(247,229,236);doc.rect(M,y-4.5,W-2*M,7,"F");doc.setFont("helvetica","bold");doc.setFontSize(9);doc.setTextColor(...ink);cols.forEach(([x,t])=>T(t,x+1,y));y+=7;
+  doc.setFont("helvetica","normal");
+  for(const it of S.view){
+    if(y>H-M-6){doc.addPage();y=M+4}
+    const w=it.sent?"Sent":whenLabel(it.o.days).replace(" · ",", ");
+    doc.setTextColor(...(it.sent?[53,114,87]:(it.o.days<=3?urg:ink)));T(w,cols[0][0]+1,y);doc.setTextColor(...ink);
+    T(`${DAYS[it.o.date.getDay()]} ${it.o.date.getDate()} ${MN[it.o.date.getMonth()]}`,cols[1][0]+1,y);
+    T(doc.splitTextToSize(pdfSafe(it.c.name),58)[0],cols[2][0]+1,y);T(doc.splitTextToSize(pdfSafe(it.c.company||"-"),42)[0],cols[3][0]+1,y);T(doc.splitTextToSize(pdfSafe(it.c.am||"-"),34)[0],cols[4][0]+1,y);
+    doc.setDrawColor(234,221,226);doc.line(M,y+2.5,W-M,y+2.5);y+=7;
+  }
+  y+=6;
+  S.view.forEach((it,i)=>{
+    const c=it.c,p=prefs(c),msg=pdfSafe(currentText(it)),IMG=56;
+    doc.setFont("helvetica","normal");doc.setFontSize(10);const lines=doc.splitTextToSize(msg,W-2*M-8);
+    const blockH=Math.max(IMG,42)+10+lines.length*4.6+12;
+    if(y+Math.min(blockH,H-2*M)>H-M){doc.addPage();y=M}
+    doc.setDrawColor(234,221,226);doc.roundedRect(M,y,W-2*M,Math.min(blockH,H-M-y),3,3,"S");
+    const cv=S.canvases[i];if(cv){const sm=document.createElement("canvas");sm.width=sm.height=720;sm.getContext("2d").drawImage(cv,0,0,720,720);doc.addImage(sm.toDataURL("image/jpeg",.86),"JPEG",M+4,y+4,IMG,IMG)}
+    const X=M+IMG+10;let ty=y+10;
+    doc.setFont("helvetica","bold");doc.setFontSize(13);doc.setTextColor(...ink);T(doc.splitTextToSize(pdfSafe(c.name),W-M-X-4)[0],X,ty);ty+=6;
+    doc.setFont("helvetica","normal");doc.setFontSize(10);doc.setTextColor(...muted);
+    const info=[c.company||"No company listed",`Birthday: ${fmtDate(it.o.date)}  (${it.sent?"sent":whenLabel(it.o.days).replace(" · ",", ").toLowerCase()})`,`Account manager: ${c.am||"not listed"}`,`WhatsApp: ${c.wa?fmtPhone(c.wa):(c.phone?c.phone+" (check number)":"none")}`,`Email: ${c.email||"none"}`,`Email subject: ${subject(c,it.o,p.lang)}`,`Language: ${p.lang==="en"?"English":p.lang==="bm"?"Bahasa Melayu":"BM + English"}`];
+    info.forEach(l=>{doc.splitTextToSize(pdfSafe(l),W-M-X-4).slice(0,2).forEach(s=>{T(s,X,ty);ty+=4.8})});
+    let my=y+Math.max(IMG+4,ty-y)+6;doc.setFont("helvetica","bold");doc.setFontSize(9);doc.setTextColor(...acc);T("MESSAGE (copy and paste)",M+4,my);my+=5;
+    doc.setFont("helvetica","normal");doc.setFontSize(10);doc.setTextColor(...ink);
+    for(const l of lines){if(my>H-M-4){doc.addPage();my=M+6}T(l,M+4,my);my+=4.6}
+    y=my+8;
+  });
+  const fixes=S.problems;
+  if(fixes.length){
+    if(y>H-60){doc.addPage();y=M}
+    doc.setFont("helvetica","bold");doc.setFontSize(13);doc.setTextColor(...ink);T("Fix in your Excel",M,y+4);y+=10;
+    doc.setFontSize(9);doc.setFont("helvetica","normal");
+    for(const p of fixes.slice().sort((a,b)=>(a.level===b.level?0:a.level==="fix"?-1:1)||a.row-b.row)){
+      const ls=doc.splitTextToSize(pdfSafe(`${p.level==="fix"?"[Left out]":"[Check]"} ${p.issue}`),W-2*M-60);
+      if(y+ls.length*4.4>H-M){doc.addPage();y=M+4}
+      doc.setTextColor(...(p.level==="fix"?[174,53,53]:[125,96,14]));T(`Row ${p.row}`,M,y);doc.setTextColor(...ink);T(doc.splitTextToSize(pdfSafe(p.name),40)[0],M+16,y);
+      ls.forEach((l,k)=>T(l,M+60,y+k*4.4));y+=ls.length*4.4+2.5;
+    }
+  }
+  const n=doc.getNumberOfPages();for(let k=1;k<=n;k++){doc.setPage(k);doc.setFontSize(8);doc.setTextColor(...muted);T(`Page ${k} of ${n}`,W-M,H-7,{align:"right"})}
+  return doc.output("blob");
+}
+
+/* ---------- start ---------- */
+const go=()=>rebuild();
+if(document.fonts&&document.fonts.load){Promise.all(['700 80px "Dancing Script"','700 60px Outfit','600 40px Outfit','500 30px Inter'].map(f=>document.fonts.load(f).catch(()=>{}))).then(go,go)}else go();
+window.__cbr={S,parseBirthday,parsePhone,buildPdf};
+})();
+</script>
+
+</body>
+</html>
